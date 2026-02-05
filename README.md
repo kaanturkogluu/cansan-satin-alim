@@ -1,59 +1,177 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# İster — Talep ve Onay Yönetim Sistemi
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel tabanlı, çok kademeli onay akışına sahip bir **talep (request) yönetim sistemi**. Mühendisler talep oluşturur; talepler amir → müdür → satın alma sırasıyla onaylanır. Sadece ilgili kademe kendi kuyruğundaki talepleri görüntüleyebilir; tüm talepleri yalnızca admin görüntüleyebilir.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Teknoloji
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **PHP** 8.2+
+- **Laravel** 12
+- **Laravel Breeze** (kimlik doğrulama)
+- **Tailwind CSS**, **Alpine.js**
+- **MySQL** / **SQLite** (veya Laravel’in desteklediği diğer veritabanları)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Kurulum
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### Gereksinimler
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- PHP 8.2+
+- Composer
+- Node.js (opsiyonel; front-end derleme için)
+- MySQL veya SQLite
 
-## Laravel Sponsors
+### Adımlar
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+# Bağımlılıkları yükle
+composer install
 
-### Premium Partners
+# Ortam dosyası
+cp .env.example .env
+php artisan key:generate
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+# .env içinde veritabanı ayarlarını yapın (DB_CONNECTION, DB_DATABASE, vb.)
 
-## Contributing
+# Veritabanı ve tablolar
+php artisan migrate
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+# Varsayılan veriler (roller, birimler, örnek kullanıcılar, talepler)
+php artisan db:seed
+```
 
-## Code of Conduct
+### Storage bağlantısı (görsel yükleme için)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan storage:link
+```
 
-## Security Vulnerabilities
+Görsel yükleme kullanılacaksa `public/storage` → `storage/app/public` sembolik linki oluşturulmalıdır.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
+## Sistem Özeti
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Özellik | Açıklama |
+|--------|----------|
+| **Roller** | Mühendis, Amir (Şef), Müdür, Satın Alma, Admin. Roller admin panelinden yönetilir. |
+| **Bölümler** | Kullanıcı ve talep ataması için. Admin panelinden CRUD. |
+| **Talepler** | Başlık, açıklama ve birden fazla **kalem** (içerik, link, birim, miktar, görsel). |
+| **Onay akışı** | Mühendis oluşturur → Amir onaylar → Müdür onaylar → Satın Alma onaylar → Onaylandı. |
+| **Görünürlük** | Her kademe yalnızca kendi onay kuyruğundaki talepleri görür; admin tüm talepleri görür. |
+
+---
+
+## Roller ve Yetkiler
+
+| Rol | Erişim |
+|-----|--------|
+| **Mühendis** | Kendi taleplerini listeler, yeni talep oluşturur. Sadece kendi taleplerinin detayını görür. |
+| **Amir (Şef)** | Sadece **kendi departmanındaki** ve **Şef Onayı Bekliyor** durumundaki talepleri görür ve onaylar/reddeder. |
+| **Müdür** | Sadece **Müdür Onayı Bekliyor** durumundaki talepleri görür ve onaylar/reddeder. Amir onaylamadan müdür talep göremez. |
+| **Satın Alma** | Sadece **Satın Alma Onayı Bekliyor** durumundaki talepleri görür ve onaylar/reddeder. |
+| **Admin** | Tüm talepleri (tüm durumlarda) görüntüleyebilir ve düzenleyebilir. Bölüm, rol, birim ve kullanıcı yönetimi yapar. |
+
+**Özet kural:** Bir alt kademe onaylamadan üst kademe talebi görüntüleyemez. Sadece admin tüm durumlardaki talepleri görüntüleyebilir.
+
+---
+
+## Talep Akışı (Durumlar)
+
+1. **pending_chief** — Şef onayı bekliyor (Amir görür).
+2. **pending_manager** — Müdür onayı bekliyor (Müdür görür).
+3. **pending_purchasing** — Satın alma onayı bekliyor (Satın Alma görür).
+4. **approved** — Tamamlandı.
+5. **rejected** — Reddedildi (red sebebi kaydedilir).
+
+Mühendis talep oluşturduğunda talep `pending_chief` ile başlar.
+
+---
+
+## Talep Oluşturma (Mühendis)
+
+- **Başlık** ve **açıklama** zorunlu.
+- **Kalemler:** Her kalemde:
+  - **İçerik** (zorunlu)
+  - **Birim** ve **miktar** (opsiyonel)
+  - **Link** (opsiyonel)
+  - **Görsel:**  
+    - **Sistemden seç:** Modalda görsel adına göre arama, sayfalı liste, seçim. Seçim yapılınca yükleme alanı kilitlenir; “Seçimi iptal et” ile kaldırılabilir.  
+    - **Görsel yükle:** Görsel adı (zorunlu) + dosya yükleme. Sistemden seçim yapılmışsa yükleme alanları devre dışıdır.
+
+Görsel için: ya sistemden seçilir ya da yeni dosya yüklenir; ikisi birlikte kullanılamaz.
+
+---
+
+## Admin Paneli
+
+Sadece **admin** rolündeki kullanıcılar `/admin/dashboard` ve altındaki sayfalara erişir.
+
+| Modül | Açıklama |
+|-------|----------|
+| **Yönetim Paneli** | Ana sayfa; diğer modüllere linkler. |
+| **Kullanıcı Yönetimi** | Kullanıcı listesi, oluşturma, düzenleme, silme. Rol ve bölüm ataması. |
+| **Talep Listesi** | Tüm talepler; durum/tarih filtresi; detay ve talep düzenleme. |
+| **Roller** | Rol listesi, ekleme, düzenleme (ad, slug, sıra), silme. Kullanıcıya atanmış rol silinemez. |
+| **Bölümler** | Bölüm listesi, ekleme, düzenleme, silme. Kullanıcıya atanmış bölüm silinemez. |
+| **Birimler** | Talep kalemleri için birimler (Adet, Kg, Litre vb.); CRUD. |
+
+---
+
+## Önemli Rotalar
+
+| Rota | Açıklama |
+|------|----------|
+| `/` | Giriş sayfasına yönlendirir. |
+| `/dashboard` | Role göre: Mühendis → Taleplerim, Amir/Müdür/Satın Alma → Bekleyen Onaylar, Admin → Admin paneli. |
+| `/requests` | Mühendis: kendi talepleri. Diğer roller: Bekleyen Onaylar sayfasına yönlendirilir. |
+| `/requests/create` | Yeni talep (sadece mühendis). |
+| `/approvals` | Bekleyen onaylar listesi (Amir, Müdür, Satın Alma). |
+| `/admin/dashboard` | Admin ana sayfa. |
+| `/admin/requests` | Tüm talepler (admin). |
+| `/admin/users` | Kullanıcı yönetimi. |
+| `/admin/roles` | Rol yönetimi. |
+| `/admin/departments` | Bölüm yönetimi. |
+| `/admin/units` | Birim yönetimi. |
+
+---
+
+## Varsayılan Giriş Bilgileri (Seed Sonrası)
+
+Tüm kullanıcılar için varsayılan şifre: **`password`**
+
+| Rol | E-posta |
+|-----|---------|
+| Admin | admin@example.com |
+| Mühendis | engineer@example.com |
+| Şef | chief@example.com |
+| Müdür | manager@example.com |
+| Satın Alma | purchasing@example.com |
+
+Detay için proje kökündeki `girisbilgileri.md` dosyasına bakılabilir.
+
+---
+
+## Veritabanı Yapısı (Özet)
+
+- **users** — name, email, password, role (slug), department_id (soft delete destekli).
+- **departments** — name.
+- **roles** — name, slug, sort_order.
+- **request_forms** — user_id, department_id, request_no, title, description, status, rejection_reason.
+- **request_items** — request_form_id, content, link, unit_id, quantity, image_path, image_name.
+- **request_histories** — request_form_id, user_id, action, note (onay/red/oluşturma kayıtları).
+- **units** — name, symbol.
+
+---
+
+## Çoklu Dil
+
+Arayüz ve mesajlar **Türkçe** (varsayılan) ve İngilizce için hazırlanabilir. Çeviriler `lang/tr.json` ve `lang/tr/` altında tutulur.
+
+---
+
+## Lisans
+
+Bu proje [MIT lisansı](https://opensource.org/licenses/MIT) altında lisanslanmıştır.
