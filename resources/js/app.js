@@ -127,22 +127,52 @@ function notificationListData() {
     },
 
     init() {
-      if (!userId || typeof window.Echo === 'undefined') return;
-      const channelName = 'App.Models.User.' + userId;
-      window.Echo.private(channelName).notification((payload) => {
-        const n = payload?.notification || payload;
-        const data = n?.data || n;
-        const id = n?.id || data?.id;
-        if (!id || !data) return;
-        this.list = [
-          {
-            id: id,
-            data: data,
-            created_at: data.created_at_iso || n.created_at || new Date().toISOString(),
-          },
-          ...this.list,
-        ];
-      });
+      const self = this;
+      const unreadUrl = config.unreadUrl || '/notifications/unread';
+
+      function pushNotification(payload) {
+        // Laravel sends flat payload: { id, type, request_no, message, created_at_iso, ... } (no nested .data)
+        const data = payload?.data ?? payload;
+        if (!data || typeof data !== 'object') return;
+        const id = payload?.id ?? data?.id;
+        const newItem = {
+          id: id || 'broadcast-' + Date.now(),
+          data: data,
+          created_at: data.created_at_iso || payload?.created_at || new Date().toISOString(),
+        };
+        self.list = [newItem, ...self.list];
+      }
+
+      // WebSocket: anında bildirim (Reverb açıksa)
+      if (userId && typeof window.Echo !== 'undefined') {
+        const channelName = 'App.Models.User.' + userId;
+        window.Echo.private(channelName).notification(pushNotification);
+      }
+
+      // Polling yedeği: sayfa yenilenmeden yeni bildirimler (WebSocket kapalı/hatalı olsa da çalışır)
+      const pollInterval = 15 * 1000;
+      const poll = () => {
+        fetch(unreadUrl, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => {
+            if (!data?.notifications?.length) return;
+            const existingIds = new Set(self.list.map((n) => n.id));
+            const newOnes = data.notifications.filter((n) => !existingIds.has(n.id));
+            if (newOnes.length) {
+              self.list = [
+                ...newOnes.map((n) => ({
+                  id: n.id,
+                  data: n.data || {},
+                  created_at: n.created_at || new Date().toISOString(),
+                })),
+                ...self.list,
+              ];
+            }
+          })
+          .catch(() => {});
+      };
+      const pollTimer = setInterval(poll, pollInterval);
+      poll();
     },
   };
 }

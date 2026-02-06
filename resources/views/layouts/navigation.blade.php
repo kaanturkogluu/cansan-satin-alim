@@ -52,6 +52,7 @@
                     $notificationListConfig = [
                         'userId' => Auth::id(),
                         'readRedirectBase' => url('notifications'),
+                        'unreadUrl' => url('notifications/unread'),
                         'list' => collect($userUnreadNotifications ?? [])->map(fn ($n) => [
                             'id' => $n->id,
                             'data' => $n->data,
