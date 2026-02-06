@@ -15,4 +15,9 @@ class RequestHistory extends Model
     {
         return $this->belongsTo(User::class)->withTrashed();
     }
+
+    public function requestForm()
+    {
+        return $this->belongsTo(RequestForm::class, 'request_form_id');
+    }
 }

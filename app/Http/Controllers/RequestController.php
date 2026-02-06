@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\RequestListUpdate;
 use App\Models\RequestForm;
 use App\Models\RequestItem;
 use App\Models\RequestHistory;
 use App\Models\Unit;
+use App\Models\User;
+use App\Notifications\RequestApprovalNotification;
+use App\Support\SafeBroadcast;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +25,23 @@ class RequestController extends Controller
             return redirect()->route('requests.approvals');
         }
         $requests = RequestForm::where('user_id', $user->id)->with('items')->latest()->get();
-        return view('requests.index', compact('requests'));
+        $requestsForJs = $requests->map(fn ($r) => [
+            'id' => $r->id,
+            'request_no' => $r->request_no,
+            'title' => $r->title,
+            'status' => $r->status,
+            'created_at' => $r->created_at->toIso8601String(),
+        ])->values()->toArray();
+        $userRequestsChannel = 'user.' . $user->id . '.requests';
+        $requestShowBaseUrl = url('requests');
+        $statusLabels = [
+            'pending_chief' => __('pending_chief'),
+            'pending_manager' => __('pending_manager'),
+            'pending_purchasing' => __('pending_purchasing'),
+            'approved' => __('approved'),
+            'rejected' => __('rejected'),
+        ];
+        return view('requests.index', compact('requests', 'requestsForJs', 'userRequestsChannel', 'requestShowBaseUrl', 'statusLabels'));
     }
 
     // Engineer: Create Form — sadece mühendis talep oluşturabilir
@@ -97,7 +117,8 @@ class RequestController extends Controller
             }
         }
 
-        DB::transaction(function () use ($request, $validSystemPaths) {
+        $form = null;
+        DB::transaction(function () use ($request, $validSystemPaths, &$form) {
             $form = RequestForm::create([
                 'user_id' => Auth::id(),
                 'department_id' => Auth::user()->department_id,
@@ -137,6 +158,22 @@ class RequestController extends Controller
             ]);
         });
 
+        // Yeni talep: şef ve mühendis listelerine anlık düşsün + şeflere bildirim
+        if ($form) {
+            SafeBroadcast::send(new RequestListUpdate(
+                [
+                    'approvals.chief.' . $form->department_id,
+                    'user.' . $form->user_id . '.requests',
+                ],
+                'added',
+                $form
+            ));
+            $chiefs = User::where('role', 'chief')->where('department_id', $form->department_id)->get();
+            foreach ($chiefs as $chief) {
+                $chief->notify(new RequestApprovalNotification($form, 'new_request'));
+            }
+        }
+
         return redirect()->route('requests.index')->with('success', 'Request created successfully.');
     }
 
@@ -152,20 +189,32 @@ class RequestController extends Controller
                 abort(403, __('You can only view your own requests.'));
             }
         } elseif ($user->role === 'chief') {
-            if ($requestForm->status !== 'pending_chief' || $requestForm->department_id != $user->department_id) {
+            $canView = ($requestForm->status === 'pending_chief' && $requestForm->department_id == $user->department_id)
+                || RequestHistory::where('request_form_id', $requestForm->id)->where('user_id', $user->id)->whereIn('action', ['approved', 'rejected'])->exists();
+            if (! $canView) {
                 abort(403, __('You can only view requests pending your approval in your department.'));
             }
         } elseif ($user->role === 'manager') {
-            if ($requestForm->status !== 'pending_manager') {
+            $canView = $requestForm->status === 'pending_manager'
+                || RequestHistory::where('request_form_id', $requestForm->id)->where('user_id', $user->id)->whereIn('action', ['approved', 'rejected'])->exists();
+            if (! $canView) {
                 abort(403, __('You can only view requests pending your approval.'));
             }
         } elseif ($user->role === 'purchasing') {
-            if ($requestForm->status !== 'pending_purchasing') {
+            $canView = $requestForm->status === 'pending_purchasing'
+                || RequestHistory::where('request_form_id', $requestForm->id)->where('user_id', $user->id)->whereIn('action', ['approved', 'rejected'])->exists();
+            if (! $canView) {
                 abort(403, __('You can only view requests pending your approval.'));
             }
         } else {
             abort(403);
         }
+
+        // Bu talebe ait okunmamış bildirimleri okundu işaretle (detay sayfası görüntülenince)
+        $user->unreadNotifications()
+            ->get()
+            ->filter(fn ($n) => ($n->data['request_form_id'] ?? null) == $requestForm->id)
+            ->each->markAsRead();
 
         $requestForm->load(['items.unit', 'histories.user', 'user', 'department']);
         return view('requests.show', compact('requestForm'));
@@ -194,7 +243,52 @@ class RequestController extends Controller
         }
 
         $requests = $query->latest()->get();
-        return view('requests.approvals', compact('requests'));
+
+        if ($user->role === 'chief') {
+            $approvalsChannel = 'approvals.chief.' . $user->department_id;
+        } elseif ($user->role === 'manager') {
+            $approvalsChannel = 'approvals.manager';
+        } elseif ($user->role === 'purchasing') {
+            $approvalsChannel = 'approvals.purchasing';
+        } else {
+            $approvalsChannel = null;
+        }
+
+        $requestsForJs = $requests->map(fn ($r) => [
+            'id' => $r->id,
+            'request_no' => $r->request_no,
+            'title' => $r->title,
+            'status' => $r->status,
+            'created_at' => $r->created_at->toIso8601String(),
+            'user' => $r->user ? ['id' => $r->user->id, 'name' => $r->user->name] : null,
+        ])->values()->toArray();
+
+        $requestShowBaseUrl = url('requests');
+
+        return view('requests.approvals', compact('requests', 'approvalsChannel', 'requestsForJs', 'requestShowBaseUrl'));
+    }
+
+    /** Şef / Müdür / Satın Alma: Onay veya red verdikleri taleplerin listesi */
+    public function myActions()
+    {
+        $user = Auth::user();
+        if ($user->role === 'engineer') {
+            return redirect()->route('requests.index');
+        }
+        if ($user->role === 'admin') {
+            return redirect()->route('admin.requests');
+        }
+        if (! in_array($user->role, ['chief', 'manager', 'purchasing'], true)) {
+            abort(403);
+        }
+
+        $actions = RequestHistory::where('user_id', $user->id)
+            ->whereIn('action', ['approved', 'rejected'])
+            ->with(['requestForm.user'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('requests.my-actions', compact('actions'));
     }
 
     // Action: Approve — sadece ilgili birim onaylayabilir; amir sadece kendi departmanındaki pending_chief
@@ -224,6 +318,26 @@ class RequestController extends Controller
             'action' => 'approved',
             'note' => 'Approved by ' . $user->role,
         ]);
+
+        $engineerId = $requestForm->user_id;
+        $deptId = $requestForm->department_id;
+
+        if ($user->role === 'chief') {
+            SafeBroadcast::send(new RequestListUpdate(['approvals.chief.' . $deptId], 'removed', $requestForm));
+            SafeBroadcast::send(new RequestListUpdate(['approvals.manager'], 'added', $requestForm));
+            foreach (User::where('role', 'manager')->get() as $manager) {
+                $manager->notify(new RequestApprovalNotification($requestForm, 'moved_to_manager'));
+            }
+        } elseif ($user->role === 'manager') {
+            SafeBroadcast::send(new RequestListUpdate(['approvals.manager'], 'removed', $requestForm));
+            SafeBroadcast::send(new RequestListUpdate(['approvals.purchasing'], 'added', $requestForm));
+            foreach (User::where('role', 'purchasing')->get() as $purchasing) {
+                $purchasing->notify(new RequestApprovalNotification($requestForm, 'moved_to_purchasing'));
+            }
+        } elseif ($user->role === 'purchasing') {
+            SafeBroadcast::send(new RequestListUpdate(['approvals.purchasing'], 'removed', $requestForm));
+        }
+        SafeBroadcast::send(new RequestListUpdate(['user.' . $engineerId . '.requests'], 'updated', $requestForm));
 
         return back()->with('success', 'Request approved.');
     }
@@ -257,6 +371,17 @@ class RequestController extends Controller
             'action' => 'rejected',
             'note' => $request->reason,
         ]);
+
+        $engineerId = $requestForm->user_id;
+        $deptId = $requestForm->department_id;
+        if ($user->role === 'chief') {
+            SafeBroadcast::send(new RequestListUpdate(['approvals.chief.' . $deptId], 'removed', $requestForm));
+        } elseif ($user->role === 'manager') {
+            SafeBroadcast::send(new RequestListUpdate(['approvals.manager'], 'removed', $requestForm));
+        } elseif ($user->role === 'purchasing') {
+            SafeBroadcast::send(new RequestListUpdate(['approvals.purchasing'], 'removed', $requestForm));
+        }
+        SafeBroadcast::send(new RequestListUpdate(['user.' . $engineerId . '.requests'], 'updated', $requestForm));
 
         return back()->with('success', 'Request rejected.');
     }

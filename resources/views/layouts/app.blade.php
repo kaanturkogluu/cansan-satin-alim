@@ -35,8 +35,7 @@
             },
         }
     </script>
-    <script src="//unpkg.com/alpinejs" defer></script>
-    <!-- @vite(['resources/css/app.css', 'resources/js/app.js']) -->
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="font-sans antialiased">

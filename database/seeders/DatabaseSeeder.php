@@ -66,7 +66,7 @@ class DatabaseSeeder extends Seeder
             'department_id' => $purchDept->id,
         ]);
 
-        $this->call(UnitSeeder::class);
-        $this->call(RequestFormSeeder::class);
+        // $this->call(UnitSeeder::class);
+        // $this->call(RequestFormSeeder::class);
     }
 }

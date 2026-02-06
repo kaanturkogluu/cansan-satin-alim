@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\RequestController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -17,6 +18,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/requests/create', [RequestController::class, 'create'])->name('requests.create');
     Route::get('/requests/search-images', [RequestController::class, 'searchImages'])->name('requests.search-images');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
+    Route::get('/requests/my-actions', [RequestController::class, 'myActions'])->name('requests.my-actions');
     Route::get('/requests/{requestForm}', [RequestController::class, 'show'])->name('requests.show');
 
     Route::get('/approvals', [RequestController::class, 'approvals'])->name('requests.approvals');
@@ -25,6 +27,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::get('/notifications/{id}/read-and-redirect', [NotificationController::class, 'readAndRedirect'])->name('notifications.read-redirect');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

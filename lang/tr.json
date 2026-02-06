@@ -206,5 +206,17 @@
     "You can only approve requests from your department.": "Yalnızca kendi departmanınızdaki talepleri onaylayabilirsiniz.",
     "You cannot approve this request.": "Bu talebi onaylayamazsınız.",
     "You cannot reject this request.": "Bu talebi reddedemezsiniz.",
-    "Only engineers can create requests.": "Yalnızca mühendisler talep oluşturabilir."
+    "Only engineers can create requests.": "Yalnızca mühendisler talep oluşturabilir.",
+    "socket.connected": "Canlı bağlantı aktif",
+    "socket.connecting": "Bağlantı kuruluyor",
+    "socket.disconnected": "Bağlantı koptu, tıklayıp yeniden deneyin",
+    "My Approvals / Rejections": "Onay / Red Geçmişim",
+    "My action": "Verdiğim karar",
+    "No approvals or rejections found.": "Onay veya red kaydı bulunamadı.",
+    "Notifications": "Bildirimler",
+    "unread": "okunmamış",
+    "No new notifications.": "Yeni bildirim yok.",
+    "New request :no from :name": ":name kullanıcısından yeni talep :no",
+    "Request :no approved by chief, pending your review": ":no numaralı talep şef tarafından onaylandı, incelemeniz bekleniyor",
+    "Request :no approved by manager, pending your review": ":no numaralı talep müdür tarafından onaylandı, incelemeniz bekleniyor"
 }

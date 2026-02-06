@@ -1,3 +1,13 @@
+@php
+    $socketTooltips = [
+        'socket.connected' => __('socket.connected'),
+        'socket.connecting' => __('socket.connecting'),
+        'socket.disconnected' => __('socket.disconnected'),
+    ];
+@endphp
+<script>
+    window.socketTooltips = @json($socketTooltips);
+</script>
 <nav x-data="{ open: false }" class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
     <!-- Primary Navigation Menu -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,12 +32,89 @@
                         </x-nav-link>
                     @endif
 
+                    @if(Auth::check() && in_array(Auth::user()->role, ['chief', 'manager', 'purchasing']))
+                        <x-nav-link :href="route('requests.approvals')" :active="request()->routeIs('requests.approvals')">
+                            {{ __('Pending Approvals') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('requests.my-actions')" :active="request()->routeIs('requests.my-actions')">
+                            {{ __('My Approvals / Rejections') }}
+                        </x-nav-link>
+                    @endif
 
                 </div>
             </div>
 
             <!-- Settings Dropdown -->
-            <div class="hidden sm:flex sm:items-center sm:ms-6">
+            <div class="hidden sm:flex sm:items-center sm:ms-6 sm:gap-2">
+                <!-- Bildirimler: WebSocket ile anında düşer, tıklanınca talebe yönlendir -->
+                @auth
+                @php
+                    $notificationListConfig = [
+                        'userId' => Auth::id(),
+                        'readRedirectBase' => url('notifications'),
+                        'list' => collect($userUnreadNotifications ?? [])->map(fn ($n) => [
+                            'id' => $n->id,
+                            'data' => $n->data,
+                            'created_at' => $n->created_at?->toIso8601String(),
+                        ])->values()->toArray(),
+                        'notificationsLabel' => __('Notifications'),
+                        'unreadLabel' => __('unread'),
+                        'noNewLabel' => __('No new notifications.'),
+                    ];
+                @endphp
+                <script>
+                    window._notificationListConfig = @json($notificationListConfig);
+                </script>
+                <div class="relative" x-data="notificationList()">
+                    <button type="button" @click="open = !open" class="relative p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-indigo-500">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m-6 0H9" /></svg>
+                        <span x-show="list.length > 0" class="absolute top-0 right-0 flex h-5 w-5" x-cloak>
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-xs font-medium text-white items-center justify-center" x-text="list.length > 9 ? '9+' : list.length"></span>
+                        </span>
+                    </button>
+                    <div x-show="open" x-cloak @click.outside="open = false" x-transition class="absolute right-0 z-50 mt-2 w-80 origin-top-right rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                        <div class="py-1 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+                            <span class="text-sm font-medium text-gray-900 dark:text-gray-100" x-text="notificationsLabel"></span>
+                            <span x-show="list.length > 0" class="text-xs text-gray-500 dark:text-gray-400" x-text="' (' + list.length + ' ' + unreadLabel + ')'" x-cloak></span>
+                        </div>
+                        <div class="max-h-96 overflow-y-auto">
+                            <template x-for="n in list" :key="n.id">
+                                <a :href="readRedirectBase + '/' + n.id + '/read-and-redirect'" class="block px-4 py-3 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+                                    <span class="font-medium text-gray-900 dark:text-gray-100" x-text="n.data?.request_no || ''"></span>
+                                    <span class="block text-gray-500 dark:text-gray-400 truncate" x-text="n.data?.message || n.data?.title || ''"></span>
+                                    <span class="text-xs text-gray-400 dark:text-gray-500" x-text="timeAgo(n.created_at)"></span>
+                                </a>
+                            </template>
+                            <p x-show="list.length === 0" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400" x-text="noNewLabel"></p>
+                        </div>
+                    </div>
+                </div>
+                @endauth
+                <!-- WebSocket durum göstergesi: Bağlı / Bağlanıyor / Bağlantı yok -->
+                <div
+                    x-data="{ tooltips: {} }"
+                    x-init="tooltips = window.socketTooltips || {}"
+                    class="flex items-center"
+                    @click="$store.socket.status === 'disconnected' && $store.socket.reconnect()"
+                    :class="{ 'cursor-pointer': $store.socket?.status === 'disconnected', 'cursor-default': $store.socket?.status !== 'disconnected' }"
+                    :title="$store.socket && tooltips[$store.socket.tooltipKey] ? tooltips[$store.socket.tooltipKey] : ($store.socket ? $store.socket.tooltipKey : '')"
+                >
+                    <span
+                        x-show="$store.socket && $store.socket.enabled !== false"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded-full text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                        :class="{
+                            'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400': $store.socket?.status === 'connected',
+                            'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 animate-pulse': $store.socket?.status === 'connecting',
+                            'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400': $store.socket?.status === 'disconnected'
+                        }"
+                        :aria-label="$store.socket && tooltips[$store.socket.tooltipKey] ? tooltips[$store.socket.tooltipKey] : ($store.socket ? $store.socket.tooltipKey : '')"
+                    >
+                        <span x-show="$store.socket?.status === 'connected'" aria-hidden="true">🟢</span>
+                        <span x-show="$store.socket?.status === 'connecting'" aria-hidden="true">🟡</span>
+                        <span x-show="$store.socket?.status === 'disconnected'" aria-hidden="true">🔴</span>
+                    </span>
+                </div>
                 <x-dropdown align="right" width="48">
                     <x-slot name="trigger">
                         <button
@@ -92,6 +179,14 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            @if(Auth::check() && in_array(Auth::user()->role, ['chief', 'manager', 'purchasing']))
+                <x-responsive-nav-link :href="route('requests.approvals')" :active="request()->routeIs('requests.approvals')">
+                    {{ __('Pending Approvals') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('requests.my-actions')" :active="request()->routeIs('requests.my-actions')">
+                    {{ __('My Approvals / Rejections') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->
